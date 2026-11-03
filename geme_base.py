@@ -19,23 +19,31 @@ COLOR_PLAYER = (0, 100, 255)   # 青色（プレイヤー）
 COLOR_ENEMY = (255, 50, 50)    # 赤色（敵）
 COLOR_WHITE = (255, 255, 255)  # 白色
 COLOR_RED = (200, 0, 0)        # 強調用赤
-
+COLOR_STAMINA = (255, 255, 0)  # 黄色（スタミナバー用）
 
 class Player:
-    """プレイヤーキャラクターの移動、HP、描画を管理するクラス"""
+    """プレイヤーキャラクターの移動（ダッシュ機能含む）、HP、描画を管理するクラス"""
 
     def __init__(self, x: float, y: float) -> None:
         """プレイヤーの初期位置やステータスを設定する"""
         self.x: float = x
         self.y: float = y
         self.radius: int = 15
-        self.speed: float = 4.0
+        self.normal_speed: float = 4.0
+        self.dash_speed: float = 7.0
+        self.speed: float = self.normal_speed
+        
         self.hp: int = 100
         self.max_hp: int = 100
         self.invincible_timer: int = 0  # 被弾後の無敵時間フレームカウンタ
 
+        # ダッシュ機能用のスタミナ関連変数（最大100、使用で減少し、不使用で回復）
+        self.max_stamina: float = 100.0
+        self.stamina: float = 100.0
+        self.is_dashing: bool = False
+
     def update(self, keys: pygame.key.ScancodeWrapper) -> None:
-        """キー入力を受けて移動処理を行い、画面外への逸脱を防ぐ"""
+        """キー入力を受けて移動処理（ダッシュ含む）を行い、画面外への逸脱を防ぐ"""
         dx: float = 0.0
         dy: float = 0.0
 
@@ -53,6 +61,23 @@ class Player:
         if dx != 0.0 and dy != 0.0:
             dx *= 0.7071
             dy *= 0.7071
+
+        # SHIFTキーが押されていて、かつ移動中かつスタミナがある場合はダッシュ
+        is_shift_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
+        if is_shift_pressed and (dx != 0.0 or dy != 0.0) and self.stamina > 5.0:
+            self.speed = self.dash_speed
+            self.is_dashing = True
+            self.stamina -= 1.5  # ダッシュ中のスタミナ消費
+            if self.stamina < 0.0:
+                self.stamina = 0.0
+        else:
+            self.speed = self.normal_speed
+            self.is_dashing = False
+            # ダッシュしていない時はスタミナを回復
+            if self.stamina < self.max_stamina:
+                self.stamina += 0.8
+                if self.stamina > self.max_stamina:
+                    self.stamina = self.max_stamina
 
         # 位置の更新
         self.x += dx * self.speed
@@ -74,12 +99,15 @@ class Player:
             self.invincible_timer -= 1
 
     def draw(self, screen: pygame.Surface) -> None:
-        """プレイヤーを描画する（無敵時間中は点滅表現を行う）"""
+        """プレイヤーを描画する（ダッシュ中は残像・色変化、無敵中は点滅）"""
         # 無敵時間中は点滅させる（5フレームごとに表示・非表示を切り替え）
         if self.invincible_timer > 0 and (self.invincible_timer // 5) % 2 == 0:
             return
 
-        pygame.draw.circle(screen, COLOR_PLAYER, (int(self.x), int(self.y)), self.radius)
+        # ダッシュ中はプレイヤーの色を少し水色っぽく（または外周を強調）変化させる
+        body_color = (0, 200, 255) if self.is_dashing else COLOR_PLAYER
+
+        pygame.draw.circle(screen, body_color, (int(self.x), int(self.y)), self.radius)
         pygame.draw.circle(screen, COLOR_WHITE, (int(self.x), int(self.y)), self.radius, 2)
 
     def get_pos(self) -> tuple[float, float]:
@@ -89,6 +117,10 @@ class Player:
     def get_hp(self) -> int:
         """プレイヤーの現在のHPを返す"""
         return self.hp
+
+    def get_stamina(self) -> float:
+        """プレイヤーの現在のスタミナを返す"""
+        return self.stamina
 
     def take_damage(self, amount: int) -> None:
         """ダメージを受け、無敵時間を付与する"""
@@ -139,7 +171,7 @@ class Game:
         """Pygameとゲーム変数を初期化する"""
         pygame.init()
         self.screen: pygame.Surface = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("SURVIVAL ARENA")
+        pygame.display.set_caption("SURVIVAL ARENA - Dash Feature")
         self.clock: pygame.time.Clock = pygame.time.Clock()
         self.font: pygame.font.Font = pygame.font.SysFont(None, 36)
         self.large_font: pygame.font.Font = pygame.font.SysFont(None, 64)
@@ -182,7 +214,7 @@ class Game:
                 if survived_seconds >= TIME_LIMIT:
                     self.game_state = "CLEAR"
 
-                # 一定時間ごと（約1.5秒おごと）に敵を出現させる
+                # 一定時間ごと（約1.5秒ごと）に敵を出現させる
                 self.spawn_timer += 1
                 if self.spawn_timer >= 90:
                     self.spawn_timer = 0
@@ -250,17 +282,22 @@ class Game:
         for enemy in self.enemies:
             enemy.draw(self.screen)
 
-        # UI（HP、スコア、残り時間）の描画
+        # UI（HP、スタミナ、スコア、残り時間）の描画
         hp_text = self.font.render(f"HP: {self.player.get_hp()}/{self.player.max_hp}", True, COLOR_WHITE)
         self.screen.blit(hp_text, (20, 20))
 
+        # スタミナ残量の簡易表示（テキスト ＋ バー）
+        stamina_val = int(self.player.get_stamina())
+        stamina_text = self.font.render(f"Stamina: {stamina_val}", True, COLOR_STAMINA)
+        self.screen.blit(stamina_text, (20, 55))
+
         survived_seconds = self.elapsed_frames // FPS
-        score_text = self.font.render(f"Score (Time): {survived_seconds}s", True, COLOR_WHITE)
-        self.screen.blit(score_text, (330, 20))
+        score_text = self.font.render(f"Score: {survived_seconds}s", True, COLOR_WHITE)
+        self.screen.blit(score_text, (400, 20))
 
         remaining_seconds = max(0, TIME_LIMIT - survived_seconds)
         time_text = self.font.render(f"Limit: {remaining_seconds}s", True, COLOR_WHITE)
-        self.screen.blit(time_text, (730, 20))
+        self.screen.blit(time_text, (750, 20))
 
         # ゲーム終了時のオーバーレイとメッセージ
         if self.game_state == "GAME_OVER":
