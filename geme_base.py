@@ -19,19 +19,14 @@ COLOR_PLAYER = (0, 100, 255)   # 青色（プレイヤー）
 COLOR_ENEMY = (255, 50, 50)    # 赤色（敵）
 COLOR_WHITE = (255, 255, 255)  # 白色
 COLOR_RED = (200, 0, 0)        # 強調用赤
-<<<<<<< HEAD
+COLOR_HEAL = (0, 255, 0)       # 回復アイテム
+COLOR_ITEM_SCORE = (255, 255, 0)  # スコアアイテム
 COLOR_STAMINA = (255, 255, 0)  # 黄色（スタミナバー用）
-
-class Player:
-    """プレイヤーキャラクターの移動（ダッシュ機能含む）、HP、描画を管理するクラス"""
-=======
 COLOR_SHIELD = (0, 230, 255)   # シールド用シアン
 
 
 class Player:
     """プレイヤーの移動、HP、シールド（バリア）、描画を管理するクラス"""
->>>>>>> C0C25081/シールド機能
-
     def __init__(self, x: float, y: float) -> None:
         """初期位置とステータスの設定"""
         self.x: float = x
@@ -55,11 +50,9 @@ class Player:
         self.is_dashing: bool = False
 
     def update(self, keys: pygame.key.ScancodeWrapper) -> None:
-<<<<<<< HEAD
+
         """キー入力を受けて移動処理（ダッシュ含む）を行い、画面外への逸脱を防ぐ"""
-=======
         """移動入力とシールドタイマーの更新"""
->>>>>>> C0C25081/シールド機能
         dx: float = 0.0
         dy: float = 0.0
 
@@ -83,7 +76,6 @@ class Player:
             dx *= 0.7071
             dy *= 0.7071
 
-<<<<<<< HEAD
         # SHIFTキーが押されていて、かつ移動中かつスタミナがある場合はダッシュ
         is_shift_pressed = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
         if is_shift_pressed and (dx != 0.0 or dy != 0.0) and self.stamina > 5.0:
@@ -102,9 +94,9 @@ class Player:
                     self.stamina = self.max_stamina
 
         # 位置の更新
-=======
+
         # 座標の更新
->>>>>>> C0C25081/シールド機能
+
         self.x += dx * self.speed
         self.y += dy * self.speed
 
@@ -128,17 +120,17 @@ class Player:
             self.invincible_timer -= 1
 
     def draw(self, screen: pygame.Surface) -> None:
-<<<<<<< HEAD
+
         """プレイヤーを描画する（ダッシュ中は残像・色変化、無敵中は点滅）"""
         # 無敵時間中は点滅させる（5フレームごとに表示・非表示を切り替え）
-=======
+
         """プレイヤーとシールドの描画"""
         # シールド展開中のエフェクト描画（水色の円枠）
         if self.shield_timer > 0:
             pygame.draw.circle(screen, COLOR_SHIELD, (int(self.x), int(self.y)), self.radius + 8, 3)
 
         # 被弾無敵時間中の点滅処理
->>>>>>> C0C25081/シールド機能
+
         if self.invincible_timer > 0 and (self.invincible_timer // 5) % 2 == 0:
             return
 
@@ -172,6 +164,12 @@ class Player:
                 self.hp = 0
             self.invincible_timer = 60  # 被弾後1秒間の無敵
 
+    def heal(self, amount: int) -> None:
+        """HPを回復する（最大HPを超えない）"""
+        self.hp = min(self.max_hp, self.hp + amount)        
+
+        
+
 
 class Enemy:
     """敵キャラクターの移動と描画を管理するクラス"""
@@ -203,6 +201,33 @@ class Enemy:
         return (self.x, self.y)
 
 
+class Item:
+    """アイテムの種類、位置、描画を管理するクラス"""
+
+    def __init__(self, x: float, y: float, item_type: str) -> None:
+        self.x: float = x
+        self.y: float = y
+        self.radius: int = 10
+        self.item_type: str = item_type
+
+    def draw(self, screen: pygame.Surface) -> None:
+        """アイテムを種類に応じた色で描画する"""
+        if self.item_type == "HEAL":
+            color = COLOR_HEAL
+        else:
+            color = COLOR_ITEM_SCORE
+
+        pygame.draw.circle(
+            screen, color,
+            (int(self.x), int(self.y)), self.radius
+        )
+
+    def get_pos(self) -> tuple[float, float]:
+        """アイテムの座標を返す"""
+        return (self.x, self.y)
+
+
+
 class Game:
     """ゲーム全体の管理クラス"""
 
@@ -220,6 +245,9 @@ class Game:
         """ゲーム状態のリセット"""
         self.player: Player = Player(float(SCREEN_WIDTH / 2), float(SCREEN_HEIGHT / 2))
         self.enemies: list[Enemy] = []
+        self.items: list[Item] = []
+        self.item_spawn_timer: int = 0
+        self.item_score: int = 0
         self.elapsed_frames: int = 0
         self.spawn_timer: int = 0
         self.game_state: str = "PLAYING"
@@ -243,15 +271,21 @@ class Game:
             if self.game_state == "PLAYING":
                 self.player.update(keys)
 
+                # アイテムの出現処理（約10秒ごと）
+                self.item_spawn_timer += 1
+                if self.item_spawn_timer >= 600:
+                    self.item_spawn_timer = 0
+                    self.spawn_item()
+
                 self.elapsed_frames += 1
                 survived_seconds = self.elapsed_frames // FPS
                 if survived_seconds >= TIME_LIMIT:
                     self.game_state = "CLEAR"
 
-<<<<<<< HEAD
+
                 # 一定時間ごと（約1.5秒ごと）に敵を出現させる
-=======
->>>>>>> C0C25081/シールド機能
+
+
                 self.spawn_timer += 1
                 if self.spawn_timer >= 90:
                     self.spawn_timer = 0
@@ -260,6 +294,9 @@ class Game:
                 px, py = self.player.get_pos()
                 for enemy in self.enemies:
                     enemy.update(px, py)
+
+                # アイテムの取得判定
+                self.check_item_collisions()
 
                 self.check_collisions()
 
@@ -290,6 +327,30 @@ class Game:
 
         self.enemies.append(Enemy(float(x), float(y)))
 
+    def spawn_item(self) -> None:
+        """フィールド上にランダムなアイテムを生成する"""
+        x = random.randint(30, SCREEN_WIDTH - 30)
+        y = random.randint(50, SCREEN_HEIGHT - 30)
+
+        item_type = random.choice(["HEAL", "SCORE"])
+        self.items.append(Item(float(x), float(y), item_type))
+
+    def check_item_collisions(self) -> None:
+        """プレイヤーとアイテムの接触判定・取得処理"""
+        px, py = self.player.get_pos()
+
+        for item in self.items[:]:
+            ix, iy = item.get_pos()
+            distance = math.hypot(px - ix, py - iy)
+
+            if distance < self.player.radius + item.radius:
+                if item.item_type == "HEAL":
+                    self.player.heal(30)
+                elif item.item_type == "SCORE":
+                    self.item_score += 100
+
+                self.items.remove(item)
+
     def check_collisions(self) -> None:
         """当たり判定"""
         px, py = self.player.get_pos()
@@ -311,7 +372,11 @@ class Game:
         for enemy in self.enemies:
             enemy.draw(self.screen)
 
-<<<<<<< HEAD
+        # アイテム描画
+        for item in self.items:
+            item.draw(self.screen)    
+
+
         # UI（HP、スタミナ、スコア、残り時間）の描画
         hp_text = self.font.render(f"HP: {self.player.get_hp()}/{self.player.max_hp}", True, COLOR_WHITE)
         self.screen.blit(hp_text, (20, 20))
@@ -320,7 +385,7 @@ class Game:
         stamina_val = int(self.player.get_stamina())
         stamina_text = self.font.render(f"Stamina: {stamina_val}", True, COLOR_STAMINA)
         self.screen.blit(stamina_text, (20, 55))
-=======
+
         # UI描画
         hp_text = self.font.render(f"HP: {self.player.get_hp()}/{self.player.max_hp}", True, COLOR_WHITE)
         self.screen.blit(hp_text, (20, 20))
@@ -334,11 +399,15 @@ class Game:
             shield_str = "Shield: READY (Press E)"
         shield_text = self.font.render(shield_str, True, COLOR_SHIELD)
         self.screen.blit(shield_text, (20, 55))
->>>>>>> C0C25081/シールド機能
+
 
         survived_seconds = self.elapsed_frames // FPS
-        score_text = self.font.render(f"Score: {survived_seconds}s", True, COLOR_WHITE)
-        self.screen.blit(score_text, (400, 20))
+        total_score = survived_seconds + self.item_score
+
+        score_text = self.font.render(
+            f"Score: {total_score}", True, COLOR_WHITE
+        )
+        self.screen.blit(score_text, (330, 20))
 
         remaining_seconds = max(0, TIME_LIMIT - survived_seconds)
         time_text = self.font.render(f"Limit: {remaining_seconds}s", True, COLOR_WHITE)
